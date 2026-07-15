@@ -24,6 +24,11 @@ static class Win32 {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("user32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(uint dwProcessId);
+    [DllImport("user32.dll")] public static extern bool LockSetForegroundWindow(uint uLockCode);
+    public const uint ASFW_ANY = 0xFFFFFFFF;
+    public const uint LSFW_UNLOCK = 2;
     [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
     [DllImport("user32.dll")] public static extern bool SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
@@ -107,29 +112,31 @@ static class Win32 {
             IntPtr foreground = GetForegroundWindow();
             uint forePid;
             uint foreThread = GetWindowThreadProcessId(foreground, out forePid);
-            uint targetPid;
-            uint targetThread = GetWindowThreadProcessId(hWnd, out targetPid);
-            Log("focus attempt: foreThread=" + foreThread + " targetThread=" + targetThread + " sameThread=" + (foreThread == targetThread));
-            if (foreThread != targetThread && foreThread != 0) {
-                AttachThreadInput(foreThread, targetThread, true);
-                SetForegroundWindow(hWnd);
-                AttachThreadInput(foreThread, targetThread, false);
-            } else {
-                SetForegroundWindow(hWnd);
+            uint curThread = GetCurrentThreadId();
+            Log("focus attempt: foreThread=" + foreThread + " curThread=" + curThread + " sameAsFore=" + (foreThread == curThread));
+            // 关键修复：绕过 Windows 前台锁必须把【调用线程(helper)】挂到【前台线程】，
+            // 这样 SetForegroundWindow 会被当成从前台线程发起。旧版错误地挂到 target 线程，无效。
+            if (foreThread != 0 && foreThread != curThread) {
+                AttachThreadInput(foreThread, curThread, true);
             }
-            // 前台锁活跃时（如在别的窗口刚操作过），上面只会闪任务栏；
-            // 模拟一次 Alt 键释放前台锁后重试（经典绕过手段）
+            bool ok = SetForegroundWindow(hWnd);
+            if (foreThread != 0 && foreThread != curThread) {
+                AttachThreadInput(foreThread, curThread, false);
+            }
+            // 兜底：前台锁仍活跃时（如在别的窗口刚操作过），释放锁 + 允许目标进程设前台 + 模拟 Alt
             if (GetForegroundWindow() != hWnd) {
-                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+                AllowSetForegroundWindow(ASFW_ANY);
+                LockSetForegroundWindow(LSFW_UNLOCK);
+                keybd_event(VK_MENU, 0x38, 0, UIntPtr.Zero);
                 SetForegroundWindow(hWnd);
-                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                keybd_event(VK_MENU, 0x38, KEYEVENTF_KEYUP, UIntPtr.Zero);
             }
             SwitchToThisWindow(hWnd, true);
             // 提到普通窗口 z-order 最前（HWND_TOP，而非常驻 TOPMOST）
             SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-            bool ok = GetForegroundWindow() == hWnd;
-            Log("focus result: nowForeground=" + ok);
-            return ok;
+            bool result = GetForegroundWindow() == hWnd;
+            Log("focus result: nowForeground=" + result);
+            return result;
         } catch (Exception ex) { Log("focus failed: " + ex.Message); return false; }
     }
 

@@ -21,7 +21,8 @@
   - 暂停抖音**仅在「本次由本工具接管过抖音 且 你此刻仍在抖音」时**才做（`shouldPause = forcePause || (_managedSessionActive && onDouyin)`）。
   - 由此同时修掉一个隐患：旧逻辑即使焦点不在抖音也会发全局空格，可能误敲到别的窗口；新逻辑只在抖音前台时才暂停。
 - **`--diagnose` 输出新增 `is_douyin` 标记**，便于在真机验证分支是否走对。
-- **`FocusWindow` 增强：绕过 Windows 前台锁**：当 ChatGPT 完成时你正停留在别的窗口（前台锁活跃），旧的 `AttachThreadInput` 只能让任务栏闪烁、抢不到焦点，于是「不在抖音也拉回 ChatGPT」在别的窗口下失效。现改为：抢焦点失败后模拟一次 **Alt 键释放前台锁**再重试（`SetForegroundWindow`），并用 `HWND_TOP` 把 ChatGPT 窗口提到普通 z-order 最前（`SetWindowPos`），确保从任意窗口都能把焦点拉回 ChatGPT。
+- **`FocusWindow` 增强：绕过 Windows 前台锁**：当 ChatGPT 完成时你正停留在别的窗口（前台锁活跃），后台托盘程序调 `SetForegroundWindow` 会被系统拒绝（只闪任务栏）。**根因是 `AttachThreadInput` 的线程方向用错**——必须把**调用线程(helper)**挂到**前台线程**，系统才会把这次 `SetForegroundWindow` 当成前台线程发起而放行；旧版错误地挂到目标线程，所以无效。本次修正：① 改成 `AttachThreadInput(foreThread, curThread, …)`；② 仍失败则 `AllowSetForegroundWindow(ASFW_ANY)` + `LockSetForegroundWindow(LSFW_UNLOCK)` 释放锁后重试；③ 模拟一次 **Alt 键(`VK_MENU`)** 释放前台锁兜底；④ 用 `HWND_TOP` 把 ChatGPT 提到普通 z-order 最前（`SetWindowPos`）。确保从任意窗口都能把焦点拉回 ChatGPT。
+- ⚠️ **已知坑（v1.1.2 第二次修正）**：上一笔「Alt 模拟」单独不足以稳定绕过前台锁，本提交补上正确的 `AttachThreadInput` 线程方向后才真正生效。诊断日志中 `focus attempt:` 现在打印 `curThread=` / `sameAsFore=`（旧版是 `targetThread=` / `sameThread=`，可作为是否跑对新构建的判据）。
 
 ## [1.1.1] - 2026-07-14
 
