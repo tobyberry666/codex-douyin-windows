@@ -21,6 +21,7 @@
   - 暂停抖音**仅在「本次由本工具接管过抖音 且 你此刻仍在抖音」时**才做（`shouldPause = forcePause || (_managedSessionActive && onDouyin)`）。
   - 由此同时修掉一个隐患：旧逻辑即使焦点不在抖音也会发全局空格，可能误敲到别的窗口；新逻辑只在抖音前台时才暂停。
 - **`--diagnose` 输出新增 `is_douyin` 标记**，便于在真机验证分支是否走对。
+- **`FocusWindow` 增强：绕过 Windows 前台锁**：当 ChatGPT 完成时你正停留在别的窗口（前台锁活跃），旧的 `AttachThreadInput` 只能让任务栏闪烁、抢不到焦点，于是「不在抖音也拉回 ChatGPT」在别的窗口下失效。现改为：抢焦点失败后模拟一次 **Alt 键释放前台锁**再重试（`SetForegroundWindow`），并用 `HWND_TOP` 把 ChatGPT 窗口提到普通 z-order 最前（`SetWindowPos`），确保从任意窗口都能把焦点拉回 ChatGPT。
 
 ## [1.1.1] - 2026-07-14
 

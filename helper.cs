@@ -29,6 +29,7 @@ static class Win32 {
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+    public static readonly IntPtr HWND_TOP = IntPtr.Zero;
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
 
@@ -102,6 +103,7 @@ static class Win32 {
 
     public static bool FocusWindow(IntPtr hWnd) {
         try {
+            ShowWindow(hWnd, SW_RESTORE);
             IntPtr foreground = GetForegroundWindow();
             uint forePid;
             uint foreThread = GetWindowThreadProcessId(foreground, out forePid);
@@ -110,16 +112,21 @@ static class Win32 {
             Log("focus attempt: foreThread=" + foreThread + " targetThread=" + targetThread + " sameThread=" + (foreThread == targetThread));
             if (foreThread != targetThread && foreThread != 0) {
                 AttachThreadInput(foreThread, targetThread, true);
-                ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
                 AttachThreadInput(foreThread, targetThread, false);
             } else {
-                ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
             }
+            // 前台锁活跃时（如在别的窗口刚操作过），上面只会闪任务栏；
+            // 模拟一次 Alt 键释放前台锁后重试（经典绕过手段）
+            if (GetForegroundWindow() != hWnd) {
+                keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+                SetForegroundWindow(hWnd);
+                keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            }
             SwitchToThisWindow(hWnd, true);
-            SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-            SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            // 提到普通窗口 z-order 最前（HWND_TOP，而非常驻 TOPMOST）
+            SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             bool ok = GetForegroundWindow() == hWnd;
             Log("focus result: nowForeground=" + ok);
             return ok;
