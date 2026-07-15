@@ -10,6 +10,18 @@
 - **焦点切换三重保险**：后台托盘程序调 `SetForegroundWindow` 常被 Windows 拒绝，故用 `SwitchToThisWindow` + `AttachThreadInput` + `SetWindowPos` 兜底。
 - **单一事实来源（SSOT）**：Python/PowerShell 版归档于 `legacy/`，C# 为唯一维护实现。
 
+## [1.1.2] - 2026-07-15
+
+### 焦点逻辑改进：不在抖音时只拉回焦点、不打扰
+
+- **新增「当前焦点是否为抖音」判断（`IsForegroundDouyin`）**：通过前台窗口标题含「抖音」且类名为 `Chrome_WidgetWin` / `MozillaWindowClass` 判定。
+- **`BeginDouyinSession`（ChatGPT 干活阶段）改为条件触发**：仅当**用户当前正在看抖音**时才自动切到抖音窗口；否则直接跳过，不抢焦点、不擅自打开抖音。修复了此前「只要 ChatGPT 一开始干活，就把你从别的事上拽去看抖音」的打扰问题。
+- **`RecallToCodex`（ChatGPT 完成阶段）拆分暂停与拉回**：
+  - 拉回 ChatGPT 焦点**始终执行**（无论你当时在哪）。
+  - 暂停抖音**仅在「本次由本工具接管过抖音 且 你此刻仍在抖音」时**才做（`shouldPause = forcePause || (_managedSessionActive && onDouyin)`）。
+  - 由此同时修掉一个隐患：旧逻辑即使焦点不在抖音也会发全局空格，可能误敲到别的窗口；新逻辑只在抖音前台时才暂停。
+- **`--diagnose` 输出新增 `is_douyin` 标记**，便于在真机验证分支是否走对。
+
 ## [1.1.1] - 2026-07-14
 
 ### 构建可行性修复（回退 JSON 解析器）
@@ -35,3 +47,4 @@
 - 会话监控目录硬编码 `%USERPROFILE%\.codex\sessions`；若 ChatGPT 合体后挪到 `.chatgpt`，自动触发会静默失效（手动托盘点击仍可用）。
 - UIPI 限制：若 ChatGPT 以管理员运行而本工具未提权，跨权限抢前台可能失败。
 - `JavaScriptSerializer` 为废弃 API，属环境受限下的技术债（详见 `CLAUDE.md` 第 3、6 节）。
+- **Release 预编译 exe 与源码版本不同步**：GitHub Releases 上的 `DouyinForCodex.exe` 目前是 **v1.1.1**（旧焦点逻辑）。`[1.1.2]` 的源码已包含新的「不在抖音只拉回、不打扰」逻辑，需**本地重新运行 `build.ps1`** 生成新 exe 才能生效；Release 资产将在本地重建后更新。

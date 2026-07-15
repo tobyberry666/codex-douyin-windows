@@ -542,8 +542,25 @@ class TrayApp : ApplicationContext {
         return IntPtr.Zero;
     }
 
+    bool IsForegroundDouyin() {
+        IntPtr fg = Win32.GetForegroundWindow();
+        if (fg == IntPtr.Zero) return false;
+        var sb = new StringBuilder(256);
+        Win32.GetWindowText(fg, sb, 256);
+        if (sb.ToString().IndexOf(DOUYIN_TITLE, StringComparison.OrdinalIgnoreCase) < 0) return false;
+        var csb = new StringBuilder(256);
+        Win32.GetClassName(fg, csb, 256);
+        string cls = csb.ToString();
+        return cls.Contains("Chrome_WidgetWin") || cls.Contains("MozillaWindowClass");
+    }
+
     void BeginDouyinSession() {
         lock (_lock) { if (!_enabled) { Log("working ignored"); return; } }
+        // 仅当用户当前正在看抖音时才自动切到抖音；否则不打扰（不抢焦点、不擅自打开）
+        if (!IsForegroundDouyin()) {
+            Log("working: foreground not douyin, skip auto-switch");
+            return;
+        }
         Log("working activate douyin");
         int gen;
         lock (_lock) _managedSessionActive = true;
@@ -569,7 +586,10 @@ class TrayApp : ApplicationContext {
         int gen;
         lock (_lock) gen = _generation;
         lock (_lock) {
-            bool shouldPause = forcePause || _managedSessionActive;
+            bool onDouyin = IsForegroundDouyin();
+            // 自动返回时，仅当「本工具接管过抖音且用户仍在抖音」才暂停，避免误发空格到别的窗口；
+            // 手动触发(forcePause)则只要抖音窗口存在就暂停。
+            bool shouldPause = forcePause || (_managedSessionActive && onDouyin);
             if (shouldPause) {
                 var hwnd = Win32.FindBrowserWindow(DOUYIN_TITLE);
                 if (hwnd != IntPtr.Zero && Win32.IsWindowTitleValid(hwnd, DOUYIN_TITLE)) {
@@ -662,7 +682,7 @@ class Program {
         var byProc = Win32.FindWindowByProcessName("ChatGPT", "Codex");
         Console.WriteLine("codex_window_by_title=" + (byTitle != IntPtr.Zero ? "found" : "none"));
         Console.WriteLine("codex_window_by_process=" + (byProc != IntPtr.Zero ? "found" : "none"));
-        Console.WriteLine("foreground=" + Win32.GetForegroundTitle());
+        Console.WriteLine("foreground=" + Win32.GetForegroundTitle() + " is_douyin=" + (Win32.GetForegroundTitle().IndexOf("\u6296\u97f3", StringComparison.OrdinalIgnoreCase) >= 0));
         var sd = Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\.codex\sessions");
         Console.WriteLine("sessions_dir_exists=" + Directory.Exists(sd));
         Console.WriteLine("log=" + LogPath);

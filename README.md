@@ -1,6 +1,6 @@
 # Codex 抖音助手（Windows 版）
 
-监听 [Codex](https://github.com/openai/codex)（现已并入 **ChatGPT**）的本地会话状态，在抖音与 ChatGPT 窗口之间自动切换焦点：ChatGPT 在干活时帮你刷抖音，ChatGPT 等你反馈时自动暂停抖音并切回 ChatGPT。
+监听 [Codex](https://github.com/openai/codex)（现已并入 **ChatGPT**）的本地会话状态，在抖音与 ChatGPT 窗口之间自动切换焦点：ChatGPT 在干活时**若你正在看抖音**就帮你接着刷，ChatGPT 等你反馈时**一定把焦点拉回 ChatGPT**——但你不在抖音时，只拉回焦点、不打扰、不擅自暂停抖音。
 
 > 注：原产品名为 Codex，后与 ChatGPT 合体，桌面应用窗口名即为 **ChatGPT**。本工具窗口匹配同时按标题与进程名（`"ChatGPT"`, `"Codex"` 兜底）查找。
 
@@ -120,12 +120,20 @@ run.bat
 ## 🧩 命令行参数
 
 - `--self-test`：运行内置单元测试（会话元数据解析、事件相位解码、UTC 时间戳），全部通过打印 `Self-tests passed.` 并以退出码 `0` 结束；失败则 `Debug.Assert` 中断。
-- `--diagnose`：打印环境诊断信息——抖音窗口、ChatGPT 窗口（按**标题**与**进程名**分别报告）、当前前台窗口标题、`%USERPROFILE%\.codex\sessions` 目录是否存在、最近 48 小时会话文件数。
+- `--diagnose`：打印环境诊断信息——抖音窗口、ChatGPT 窗口（按**标题**与**进程名**分别报告）、当前前台窗口标题与 `is_douyin` 标记（当前焦点是否为抖音，用于验证上面的分支逻辑）、`%USERPROFILE%\.codex\sessions` 目录是否存在、最近 48 小时会话文件数。
 
 ## 🎯 行为说明
 
-- **ChatGPT 干活（`working`，如 `task_started`）** → 自动定位 / 打开抖音窗口并切到前台，若此前被本工具暂停则按空格恢复播放。
-- **ChatGPT 等反馈（`attention`，如 `task_complete` / `turn_aborted` / `request_user_input`）** → 暂停抖音播放（按空格），稍作延迟后切回 ChatGPT 窗口。
+行为按「**你当前焦点是不是抖音**」分两种：
+
+- **你正在看抖音时（老程序全跑）**
+  - **ChatGPT 干活（`working`，如 `task_started`）** → 自动定位 / 打开抖音窗口并切到前台，若此前被本工具暂停则按空格恢复播放。
+  - **ChatGPT 等反馈（`attention`，如 `task_complete` / `turn_aborted` / `request_user_input`）** → 暂停抖音播放（按空格），稍作延迟后切回 ChatGPT 窗口。
+- **你不在抖音时（不打扰）**
+  - **ChatGPT 干活** → 本工具**不动你的焦点**，也不擅自打开抖音；你继续做自己的事。
+  - **ChatGPT 等反馈** → **仍会把焦点拉回 ChatGPT**（这样你不会错过它干完），但**不暂停抖音**（你也没在看）、也不会往别的窗口误发空格。
+
+> 判断依据是「当前前台窗口是否为抖音浏览器标签页」（标题含「抖音」且类名为 `Chrome_WidgetWin` / `MozillaWindowClass`）。
 - 仅在“用户线程”（非 subagent）会话上触发，避免子代理噪声干扰。
 - 启动时会读取最近 48 小时的 ChatGPT 会话文件做状态引导；状态通过托盘图标实时反映。
 
