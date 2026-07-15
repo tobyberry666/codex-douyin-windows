@@ -119,7 +119,7 @@ static class Win32 {
             if (foreThread != 0 && foreThread != curThread) {
                 AttachThreadInput(foreThread, curThread, true);
             }
-            bool ok = SetForegroundWindow(hWnd);
+            SetForegroundWindow(hWnd);
             if (foreThread != 0 && foreThread != curThread) {
                 AttachThreadInput(foreThread, curThread, false);
             }
