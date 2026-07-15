@@ -3,12 +3,11 @@
 监听 [Codex](https://github.com/openai/codex)（现已并入 **ChatGPT**）的本地会话状态，在抖音与 ChatGPT 窗口之间自动切换焦点：ChatGPT 在干活时**若你正在看抖音**就帮你接着刷，ChatGPT 等你反馈时**一定把焦点拉回 ChatGPT**——但你不在抖音时，只拉回焦点、不打扰、不擅自暂停抖音。
 
 > 注：原产品名为 Codex，后与 ChatGPT 合体，桌面应用窗口名即为 **ChatGPT**。本工具窗口匹配同时按标题与进程名（`"ChatGPT"`, `"Codex"` 兜底）查找。
+>又注：拉回chatgpt时您须“没有开启全屏”状态
 
 ---
 
-## 🚀 快速开始（在**别人的电脑**上也能跑）
-
-不管你在自己机器还是朋友机器上，只要按下面走就行。两种拿到代码/程序的方式，挑适合你的。
+## 🚀 快速开始
 
 ### 前置条件（Windows 10/11 自带，基本不用装）
 
@@ -52,27 +51,6 @@ run.bat
   - **⏸（pause）**：监听中 / ChatGPT 在等你反馈。
 - 想看诊断信息：`powershell -ExecutionPolicy Bypass -File build.ps1` 结尾会打印窗口与环境状态；也可单独跑 `DouyinForCodex.exe --diagnose`。
 
----
-
-## 📦 给别人用的两种分发方式
-
-> 核心原则：**对方不需要有你的仓库，也不需要会命令**，就能用起来。
-
-**A. 公开仓库 → 对方 `git clone`**（适合开发者）
-仓库已**公开**，任何人都能直接 clone 并按「方式一」构建：
-```powershell
-git clone https://github.com/tobyberry666/codex-douyin-windows.git
-```
-
-**B. 直接发编译好的 exe**（适合普通朋友，零门槛）
-让朋友到 [GitHub Releases](https://github.com/tobyberry666/codex-douyin-windows/releases) 下载 `DouyinForCodex.exe`，或你在本机 build 后把下面两个文件发他，**对方无需 Git、无需仓库、无需编译**：
-```
-DouyinForCodex.exe   <- Release 下载，或 build.ps1 生成的程序
-run.bat              <- 双击启动
-```
-朋友双击 `run.bat` 就能用。`.NET Framework` 是 Windows 自带，一般不用额外安装。
-
----
 
 ## 🏗️ 架构
 
