@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  build-and-test:
+    name: Build & Self-Test (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build C# and run self-tests
+        shell: pwsh
+        run: |
+          # build.ps1 uses Add-Type to compile helper.cs into DouyinForCodex.exe,
+          # then runs --self-test (exits 1 on failure) and --diagnose.
+          powershell -ExecutionPolicy Bypass -File build.ps1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Build or self-test failed (exit code $LASTEXITCODE)"
+            exit 1
+          }
