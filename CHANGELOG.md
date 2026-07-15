@@ -7,17 +7,17 @@
 - **单文件 C# + `Add-Type` 编译，而非 `dotnet build`**：目标机器为纯 .NET Framework 4.x、无 NuGet、无 `dotnet` SDK。`Add-Type` 可直接从单文件源码编译，零脚手架依赖。代价是代码锁在 **C# 5 语法**、引用只能是 **GAC 程序集**（见 `CLAUDE.md` 约束 A/B）。若未来要上现代 C#，应整套迁移到 `csproj` + NuGet。
 - **JSON 解析用 `JavaScriptSerializer`（废弃 API，技术债）**：`System.Text.Json` 在该环境无法被 `Add-Type` 解析。前者由 GAC 自带、零依赖可编译。已加 `#pragma warning disable 0618` + 迁移注释，一旦迁现代 .NET 即换回。
 - **窗口匹配「标题 + 进程名」双路**：产品名从 Codex 改为 ChatGPT（合体），仅按标题匹配会失效；进程名 `ChatGPT` 不依赖标题文字，作为兜底。
-- **焦点切换三重保险**：后台托盘程序调 `SetForegroundWindow` 常被 Windows 拒绝，故用 `SwitchToThisWindow` + `AttachThreadInput` + `SetWindowPos` 兜底。
+- **焦点切换（绕过 Windows 前台锁）**：后台托盘程序调 `SetForegroundWindow` 常被 Windows 拒绝（只闪任务栏），根因是前台锁。采用经典可靠的「模拟 Alt 键释放前台锁」三步兜底（`SetForegroundWindow` 直接置前 → `keybd_event(VK_MENU)` 释放锁再置前 → `AllowSetForegroundWindow` + `SetWindowPos(HWND_TOP)` + `SwitchToThisWindow` 强兜底）。**不**用 `AttachThreadInput` / `SynchronizationContext` 线程编组——后台线程无消息泵，编组既脆弱又易整体失效（曾因此把最基础的切抖音/切回 ChatGPT 都搞挂，已回退）。
 - **单一事实来源（SSOT）**：Python/PowerShell 版归档于 `legacy/`，C# 为唯一维护实现。
 
 ## [Unreleased] - 2026-07-15
 
-### 焦点切换真正修复（前台锁绕过的线程根因）
+### 回退过度工程：`FocusWindow` 简化为「模拟 Alt 键释放前台锁」三步兜底
 
-- **`[1.1.2]` 的 `FocusWindow` 改动仍无效的根因**：`SetForegroundWindow` / `AttachThreadInput` 由**后台工作线程**调用（`HandleEvent` 里 `new Thread(...).Start()`），而该线程**没有消息泵**。Windows 的 `AttachThreadInput` 要求被挂接的线程必须泵消息，把前台线程挂到一个不抽消息的线程上，前台锁豁免根本不成立——结果抖音、ChatGPT 两个方向都抢不到焦点（表现为「发消息拉不到抖音、也拉不回 ChatGPT」）。
-- **修复**：把焦点逻辑封到 **UI 线程**执行。在 `TrayApp` 构造时捕获 `SynchronizationContext.Current`（界线程同步上下文），`FocusWindow` 通过 `UiSync.Send(...)` 同步切回 UI 线程再跑 `FocusWindowCore`。此时 `GetCurrentThreadId()` 取到的是有消息泵的 UI 线程，`AttachThreadInput(foreThread, uiThread, …)` 方向正确、`SetForegroundWindow` 被系统当作前台线程发起，前台锁绕过得以成立。
-- **验证判据**：`helper.log` 中 `focus attempt:` 现在打印 `uiThread=`；若仍打印 `curThread=` 或 `targetThread=`，说明跑的不是本构建（未重建 exe 或未重启进程）。
-- ⚠️ **务必重启进程**：仅重新 `build.ps1` 覆盖 exe 不够，必须退出旧托盘进程（托盘右键退出 / 任务管理器结束 `DouyinForCodex.exe`）再双击 `run.bat`，否则内存里仍是旧逻辑。
+- **问题**：`[1.1.2]` 为绕过前台锁引入 `SynchronizationContext`（`UiSync`）机制，把 `FocusWindow` 封回 UI 线程、配 `AttachThreadInput`。这套线程编组**比它要修的问题更脆弱**——`UiSync.Send` 在后台线程同步阻塞、又依赖构造期正确捕获 UI 线程上下文，任一环节不对就整体失效，结果把最基础的「切抖音」「切回 ChatGPT」两个方向都搞挂（用户反馈「发消息拉不到抖音、也拉不回 ChatGPT」）。
+- **修复**：**彻底移除 `UiSync` / `FocusWindowCore` 线程编组**，改回从后台线程直接调用的简洁 `FocusWindow`，用经典「模拟 Alt 键释放前台锁」三步兜底：`SetForegroundWindow` 直接置前 → `keybd_event(VK_MENU)` 释放前台锁后再置前 → `AllowSetForegroundWindow(ASFW_ANY)` + `SetWindowPos(HWND_TOP)` + `SwitchToThisWindow` 强兜底。后台线程无消息泵，`AttachThreadInput` 本就不可靠，故一并弃用。
+- ⚠️ **务必重启进程**：仅 `build.ps1` 覆盖 exe 不够，必须退出旧托盘进程（托盘右键退出 / 任务管理器结束 `DouyinForCodex.exe`）再双击 `run.bat`，否则内存里仍是旧逻辑。
+- **判据**：`helper.log` 现在打印 `focus ok (direct)` / `focus ok (alt-unlock)` / `focus result=...`，据此可确认拉焦是否成功。
 
 ## [1.1.2] - 2026-07-15
 

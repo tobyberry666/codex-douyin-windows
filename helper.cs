@@ -23,8 +23,6 @@ static class Win32 {
     [DllImport("user32.dll")] public static extern IntPtr SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
-    [DllImport("user32.dll")] public static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(uint dwProcessId);
     [DllImport("user32.dll")] public static extern bool LockSetForegroundWindow(uint uLockCode);
     public const uint ASFW_ANY = 0xFFFFFFFF;
@@ -106,51 +104,29 @@ static class Win32 {
         keybd_event(VK_SPACE, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
     }
 
-    // UI 线程同步上下文：焦点操作必须在 UI 线程（有消息泵）执行，
-    // 否则 AttachThreadInput 挂错线程、SetForegroundWindow 绕不过 Windows 前台锁。
-    public static System.Threading.SynchronizationContext UiSync = null;
-
+    // 把指定窗口带到前台。从后台线程调用也能工作：
+    // Windows 有「前台锁」——若用户刚在别的窗口操作过，后台进程直接 SetForegroundWindow 会被拒（只闪任务栏）。
+    // 三步兜底：① 直接置前（空闲/锁已超时通常成功）；② 模拟一次 Alt 键释放前台锁再置前；
+    // ③ 允许任意进程置前 + 强制置顶 + 切换。这是托盘程序抢焦点的经典可靠写法，不依赖线程编组。
     public static bool FocusWindow(IntPtr hWnd) {
         if (hWnd == IntPtr.Zero) return false;
-        bool result = false;
-        if (UiSync != null) {
-            // 同步切到 UI 线程执行，确保 AttachThreadInput/SetForegroundWindow 在前台锁豁免下运行
-            UiSync.Send(delegate { result = FocusWindowCore(hWnd); }, null);
-        } else {
-            result = FocusWindowCore(hWnd);
-        }
-        return result;
-    }
-
-    static bool FocusWindowCore(IntPtr hWnd) {
         try {
             ShowWindow(hWnd, SW_RESTORE);
-            IntPtr foreground = GetForegroundWindow();
-            uint forePid;
-            uint foreThread = GetWindowThreadProcessId(foreground, out forePid);
-            uint uiThread = GetCurrentThreadId(); // 此刻在 UI 线程（有消息泵）
-            Log("focus attempt: foreThread=" + foreThread + " uiThread=" + uiThread + " sameAsFore=" + (foreThread == uiThread));
-            // 绕过前台锁：把【前台线程】挂到【UI 线程】，SetForegroundWindow 才被当成前台线程发起
-            if (foreThread != 0 && foreThread != uiThread) {
-                AttachThreadInput(foreThread, uiThread, true);
-            }
+            // ① 直接置前
             SetForegroundWindow(hWnd);
-            if (foreThread != 0 && foreThread != uiThread) {
-                AttachThreadInput(foreThread, uiThread, false);
-            }
-            // 兜底：锁仍活跃时（如在别的窗口刚操作过），释放锁 + 允许目标进程设前台 + 模拟 Alt
-            if (GetForegroundWindow() != hWnd) {
-                LockSetForegroundWindow(LSFW_UNLOCK);
-                AllowSetForegroundWindow(ASFW_ANY);
-                keybd_event(VK_MENU, 0x38, 0, UIntPtr.Zero);
-                SetForegroundWindow(hWnd);
-                keybd_event(VK_MENU, 0x38, KEYEVENTF_KEYUP, UIntPtr.Zero);
-            }
+            if (GetForegroundWindow() == hWnd) { Log("focus ok (direct)"); return true; }
+            // ② 模拟一次 Alt 键输入释放前台锁，再置前
+            keybd_event(VK_MENU, 0x38, 0, UIntPtr.Zero);
+            SetForegroundWindow(hWnd);
+            keybd_event(VK_MENU, 0x38, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            if (GetForegroundWindow() == hWnd) { Log("focus ok (alt-unlock)"); return true; }
+            // ③ 兜底：允许任意进程置前 + 置顶 + 切换
+            AllowSetForegroundWindow(ASFW_ANY);
+            LockSetForegroundWindow(LSFW_UNLOCK);
+            SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
             SwitchToThisWindow(hWnd, true);
-            // 提到普通窗口 z-order 最前（HWND_TOP，而非常驻 TOPMOST）
-            SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             bool ok = GetForegroundWindow() == hWnd;
-            Log("focus result: nowForeground=" + ok);
+            Log("focus result=" + ok);
             return ok;
         } catch (Exception ex) { Log("focus failed: " + ex.Message); return false; }
     }
@@ -449,8 +425,6 @@ class TrayApp : ApplicationContext {
     const int FocusDelayMs = 450, RecallDelayMs = 120, BootstrapStaleSeconds = 21600;
 
     public TrayApp() {
-        // 捕获 UI 线程同步上下文，供 FocusWindow 把焦点操作封回 UI 线程执行
-        Win32.UiSync = System.Threading.SynchronizationContext.Current ?? new System.Windows.Forms.WindowsFormsSynchronizationContext();
         _monitor = new SessionMonitor();
         _monitor.OnEvent += HandleEvent;
         BuildTrayIcon();
