@@ -6,23 +6,25 @@
 
 ---
 
-## 🚀 快速开始
+## 🚀 快速开始（在**别人的电脑**上也能跑）
 
-### 前置条件
+不管你在自己机器还是朋友机器上，只要按下面走就行。两种拿到代码/程序的方式，挑适合你的。
+
+### 前置条件（Windows 10/11 自带，基本不用装）
 
 | 需求 | 说明 |
 |------|------|
 | Windows 10 / 11 | 必须 |
 | .NET Framework 4.x | Windows 自带，一般无需手动装 |
 | PowerShell 5.1 | Windows 自带（`powershell` 命令可用） |
-| Git（可选） | **只有「方式一」需要**；用「方式二」下载 ZIP 则不用装 Git |
+| Git（可选） | **只有「方式一」需要**；方式二用 Release 下载 exe 或朋友直发，均不用装 Git |
 
 > 本工具构建**完全离线**：所有依赖（`System.Web.Extensions` 等）都由系统 GAC 提供，**不需要联网、不需要 NuGet、不需要 `dotnet`**。所以断网也能编译。
 
 ### 方式一：有 Git 的开发者
 
 ```powershell
-# 1) 把仓库拉到本地（需要仓库对你可见：公开，或是协作者）
+# 1) 把仓库拉到本地（仓库已公开，任何人可 clone）
 git clone https://github.com/tobyberry666/codex-douyin-windows.git
 cd codex-douyin-windows
 
@@ -35,8 +37,11 @@ run.bat
 
 ### 方式二：不懂命令的朋友（最简单）
 
-1. **拿到文件夹**：让别人把整个项目文件夹（`.zip` 解压后）发给你，**或者**把你编译好的 `DouyinForCodex.exe` + `run.bat` 两个文件发给你（见下方「分发方式」）。
-2. **双击 `run.bat`** 即可。没装 Git、没敲过命令也完全没问题。
+任选一种拿到可运行的程序：
+
+- **A. 下载预编译 exe（零门槛，推荐）**：到 [GitHub Releases](https://github.com/tobyberry666/codex-douyin-windows/releases) 下载 `DouyinForCodex.exe`，和仓库里的 `run.bat` 放在同一目录，双击 `run.bat` 即可。
+- **B. 自己编译（离线，无需联网）**：把仓库（或朋友发的整个文件夹）解压后，运行 `powershell -ExecutionPolicy Bypass -File build.ps1` 生成 `DouyinForCodex.exe`，再双击 `run.bat`。注意：GitHub 的 **Download ZIP 不含 exe**，所以这种方式必须先走编译这一步。
+- **C. 朋友直接发**：让朋友把 `DouyinForCodex.exe` + `run.bat` 两个文件发你，双击 `run.bat`。
 
 > 所有脚本都用 `$PSScriptRoot` 自动定位自己所在目录，**不依赖你在哪个盘、叫什么路径**，只要文件在同一文件夹里就能跑。
 
@@ -47,6 +52,27 @@ run.bat
   - **⏸（pause）**：监听中 / ChatGPT 在等你反馈。
 - 想看诊断信息：`powershell -ExecutionPolicy Bypass -File build.ps1` 结尾会打印窗口与环境状态；也可单独跑 `DouyinForCodex.exe --diagnose`。
 
+---
+
+## 📦 给别人用的两种分发方式
+
+> 核心原则：**对方不需要有你的仓库，也不需要会命令**，就能用起来。
+
+**A. 公开仓库 → 对方 `git clone`**（适合开发者）
+仓库已**公开**，任何人都能直接 clone 并按「方式一」构建：
+```powershell
+git clone https://github.com/tobyberry666/codex-douyin-windows.git
+```
+
+**B. 直接发编译好的 exe**（适合普通朋友，零门槛）
+让朋友到 [GitHub Releases](https://github.com/tobyberry666/codex-douyin-windows/releases) 下载 `DouyinForCodex.exe`，或你在本机 build 后把下面两个文件发他，**对方无需 Git、无需仓库、无需编译**：
+```
+DouyinForCodex.exe   <- Release 下载，或 build.ps1 生成的程序
+run.bat              <- 双击启动
+```
+朋友双击 `run.bat` 就能用。`.NET Framework` 是 Windows 自带，一般不用额外安装。
+
+---
 
 ## 🏗️ 架构
 
