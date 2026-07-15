@@ -7,10 +7,17 @@
 - **单文件 C# + `Add-Type` 编译，而非 `dotnet build`**：目标机器为纯 .NET Framework 4.x、无 NuGet、无 `dotnet` SDK。`Add-Type` 可直接从单文件源码编译，零脚手架依赖。代价是代码锁在 **C# 5 语法**、引用只能是 **GAC 程序集**（见 `CLAUDE.md` 约束 A/B）。若未来要上现代 C#，应整套迁移到 `csproj` + NuGet。
 - **JSON 解析用 `JavaScriptSerializer`（废弃 API，技术债）**：`System.Text.Json` 在该环境无法被 `Add-Type` 解析。前者由 GAC 自带、零依赖可编译。已加 `#pragma warning disable 0618` + 迁移注释，一旦迁现代 .NET 即换回。
 - **窗口匹配「标题 + 进程名」双路**：产品名从 Codex 改为 ChatGPT（合体），仅按标题匹配会失效；进程名 `ChatGPT` 不依赖标题文字，作为兜底。
-- **焦点切换（绕过 Windows 前台锁）**：后台托盘程序调 `SetForegroundWindow` 常被 Windows 拒绝（只闪任务栏），根因是前台锁。采用经典可靠的「模拟 Alt 键释放前台锁」三步兜底（`SetForegroundWindow` 直接置前 → `keybd_event(VK_MENU)` 释放锁再置前 → `AllowSetForegroundWindow` + `SetWindowPos(HWND_TOP)` + `SwitchToThisWindow` 强兜底）。**不**用 `AttachThreadInput` / `SynchronizationContext` 线程编组——后台线程无消息泵，编组既脆弱又易整体失效（曾因此把最基础的切抖音/切回 ChatGPT 都搞挂，已回退）。
+- **焦点切换（绕过 Windows 前台锁）**：后台托盘程序调 `SetForegroundWindow` 常被 Windows 拒绝（只闪任务栏），根因是前台锁。当前方案用 `AttachThreadInput` 把前台线程输入队列桥接到本线程（DllImport 须从 kernel32 取 `GetCurrentThreadId`、方向为 `AttachThreadInput(foreThread, selfThread, true)`），再 `SetForegroundWindow`+`SetActiveWindow`+`SetFocus`+`SetWindowPos(HWND_TOP)`，最后 `SwitchToThisWindow` 兜底——对浏览器/其他应用/桌面任意前台窗口都生效。曾误弃 `AttachThreadInput`：早期因 `GetCurrentThreadId` 错挂 user32 报「入口点缺失」+ 桥接方向反 + 套了 `SynchronizationContext` 过度工程而整体失效，误判其「不可靠」；现已纠正。**早期「模拟 Alt 键」三步兜底实测仅对浏览器前台有效，对浏览器外的应用/桌面无效，故弃用。**
 - **单一事实来源（SSOT）**：Python/PowerShell 版归档于 `legacy/`，C# 为唯一维护实现。
 
-## [Unreleased] - 2026-07-15
+## [1.1.3] - 2026-07-15
+
+### 独占全屏限制与闪烁兜底（承认 OS 硬约束，不再强行抢焦点）
+
+- **现象确认**：当 ChatGPT 完成、用户焦点停在**独占全屏（exclusive fullscreen）**应用（全屏游戏、全屏视频）时，无论如何都拉不回 ChatGPT。这不是代码 bug——Windows 不允许任何进程从独占全屏应用抢走前台（其独占显示表面，比前台锁更深一层），`SetForegroundWindow` / `AttachThreadInput` / `SwitchToThisWindow` 在此场景全部被无视。浏览器全屏视频（F11/全屏 API）只是无边框普通窗口，不受影响，故此前「浏览器能拉回、其他不行」的现象正源于此。
+- **策略**：`RecallToCodex` 仍**先尝试** `FocusWindow`（普通窗口、无边框全屏照常成功）；仅当抢焦点返回失败时，调用 `FlashWindow` 让 ChatGPT 任务栏图标闪烁（`FLASHWINFO` + `FlashWindowEx`，`FLASHW_TIMERNOFG` 闪到再次成为前台），并在日志打印 `focus fallback: flashed taskbar ...` 作为判据。既不误伤可抢回的普通窗口，又给独占全屏场景一个可见提示。
+- **已知局限**：独占全屏下任务栏通常被隐藏，闪烁需待用户切出/退出全屏后才可见；纯靠自动抢焦点在该场景**无解**。可靠的人工手段是注册全局热键（真实按键释放前台锁），可作为后续增强，本次未加入以免扩大改动面。
+- ⚠️ **务必重启进程**：改完 `helper.cs` 必须退出旧托盘进程再双击 `run.bat`。本环境无法编译，需你本机 `powershell -ExecutionPolicy Bypass -File build.ps1` 后自测。
 
 ### 回退过度工程：`FocusWindow` 简化为「模拟 Alt 键释放前台锁」三步兜底
 
@@ -18,6 +25,14 @@
 - **修复**：**彻底移除 `UiSync` / `FocusWindowCore` 线程编组**，改回从后台线程直接调用的简洁 `FocusWindow`，用经典「模拟 Alt 键释放前台锁」三步兜底：`SetForegroundWindow` 直接置前 → `keybd_event(VK_MENU)` 释放前台锁后再置前 → `AllowSetForegroundWindow(ASFW_ANY)` + `SetWindowPos(HWND_TOP)` + `SwitchToThisWindow` 强兜底。后台线程无消息泵，`AttachThreadInput` 本就不可靠，故一并弃用。
 - ⚠️ **务必重启进程**：仅 `build.ps1` 覆盖 exe 不够，必须退出旧托盘进程（托盘右键退出 / 任务管理器结束 `DouyinForCodex.exe`）再双击 `run.bat`，否则内存里仍是旧逻辑。
 - **判据**：`helper.log` 现在打印 `focus ok (direct)` / `focus ok (alt-unlock)` / `focus result=...`，据此可确认拉焦是否成功。
+
+### 焦点修复：改用 `AttachThreadInput` 桥接，从任意前台窗口（含桌面/其他应用）稳定拉回 ChatGPT
+
+- **现象**：上一版的「模拟 Alt 键」三步兜底，实测**仅当焦点停留在浏览器网页时**能拉回 ChatGPT；一旦焦点在浏览器外的应用或桌面，拉不回（日志表现为 `focus result=False`）。根因是前台锁对非浏览器前台窗口的 `SetForegroundWindow` 硬拒，Alt 模拟释放锁对跨进程/桌面前台不可靠。
+- **修复**：`FocusWindow` 改为标准正解——调 `AttachThreadInput(foreThread, selfThread, true)` 把前台线程输入队列桥接到本线程，使 `SetForegroundWindow` 被系统视作来自「有资格置前」的线程；随后 `SetForegroundWindow`+`SetActiveWindow`+`SetFocus`+`SetWindowPos(HWND_TOP)`，最后 `SwitchToThisWindow` 兜底（任务管理器同款强制置前）。新增强健性：`GetCurrentThreadId` 改从 kernel32 导入（此前错挂 user32 报 `GetCurrentThreadId` 入口点缺失），桥接在 `try/finally` 中一定解绑，失败被吞不影响兜底。
+- **C#5 合规**：无 `out _` 弃元、无 `$` 插值、无 `?.`，仅用字符串拼接与 `out uint` 变量，确保 `Add-Type` 编译通过。
+- ⚠️ **务必重启进程**：改完 `helper.cs` 必须退出旧托盘进程再双击 `run.bat`（内存里仍是旧逻辑）。本环境无法编译，需你本机 `powershell -ExecutionPolicy Bypass -File build.ps1` 后自测。
+- **判据**：`helper.log` 现打印 `focus ok (attach)`（桥接成功）/ `focus ok (switch)`（兜底成功）/ `focus result=...`（仍失败）。
 
 ## [1.1.2] - 2026-07-15
 

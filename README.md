@@ -151,6 +151,7 @@ run.bat
 - 抖音仅支持**浏览器网页**（匹配 `Chrome_WidgetWin` / `MozillaWindowClass` 类名）；桌面客户端暂不识别。
 - 会话监控目录硬编码 `%USERPROFILE%\.codex\sessions`；若 ChatGPT 合体后挪到 `.chatgpt`，自动触发会静默失效（手动托盘点击仍可用）。
 - 后台程序抢前台受 Windows UIPI 限制；若 ChatGPT 以管理员运行而本工具未提权，跨权限切前台可能失败。
+- **其他应用全屏会锁定焦点**：其他应用在 Windows 上处于**独占全屏**（如全屏游戏、全屏视频）时会锁定焦点，本工具无法将其抢走——这是 Windows 的系统级限制，任何进程都不能从独占全屏应用抢走前台（比前台锁更深一层）。**使用本工具时，请勿让其他应用处于全屏状态**。若 ChatGPT 完成时焦点正停在独占全屏应用，本工具会改为让 ChatGPT 的任务栏图标闪烁提醒，你切出全屏后即可看到。
 - JSON 解析使用 `System.Web.Script.Serialization.JavaScriptSerializer`（废弃 API，环境受限下的技术债）。
 
 详见 [`CLAUDE.md`](CLAUDE.md)（踩坑纪实与设计取舍）与 [`AGENTS.md`](AGENTS.md)（代理操作约定）。

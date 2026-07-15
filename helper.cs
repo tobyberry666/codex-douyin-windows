@@ -30,6 +30,11 @@ static class Win32 {
     [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
     [DllImport("user32.dll")] public static extern bool SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("user32.dll")] public static extern IntPtr SetActiveWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr hWnd);
     public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
     public static readonly IntPtr HWND_TOP = IntPtr.Zero;
@@ -40,6 +45,34 @@ static class Win32 {
     public const uint KEYEVENTF_KEYUP = 0x0002;
     public const byte VK_SPACE = 0x20;
     public const byte VK_MENU = 0x12;
+    public const uint SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2000;
+    public const uint SPIF_SENDCHANGE = 0x0002;
+
+    // 任务栏图标闪烁提醒（用于无法强抢焦点的场景：独占全屏游戏/视频，系统禁止其他进程抢前台）
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FLASHWINFO {
+        public int cbSize;
+        public IntPtr hwnd;
+        public uint dwFlags;
+        public uint uCount;
+        public uint dwTimeout;
+    }
+    [DllImport("user32.dll")] private static extern bool FlashWindowEx(ref FLASHWINFO pfwi);
+    private const uint FLASHW_ALL = 0x3;
+    private const uint FLASHW_TIMERNOFG = 0xC; // 闪烁直到该窗口再次成为前台
+
+    public static void FlashWindow(IntPtr hWnd) {
+        if (hWnd == IntPtr.Zero) return;
+        try {
+            FLASHWINFO fi = new FLASHWINFO();
+            fi.cbSize = Marshal.SizeOf(typeof(FLASHWINFO));
+            fi.hwnd = hWnd;
+            fi.dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG;
+            fi.uCount = 5;
+            fi.dwTimeout = 0;
+            FlashWindowEx(ref fi);
+        } catch (Exception ex) { Log("flash failed: " + ex.Message); }
+    }
 
     public static IntPtr FindBrowserWindow(string titleContains) {
         IntPtr result = IntPtr.Zero;
@@ -104,27 +137,45 @@ static class Win32 {
         keybd_event(VK_SPACE, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
     }
 
-    // 把指定窗口带到前台。从后台线程调用也能工作：
-    // Windows 有「前台锁」——若用户刚在别的窗口操作过，后台进程直接 SetForegroundWindow 会被拒（只闪任务栏）。
-    // 三步兜底：① 直接置前（空闲/锁已超时通常成功）；② 模拟一次 Alt 键释放前台锁再置前；
-    // ③ 允许任意进程置前 + 强制置顶 + 切换。这是托盘程序抢焦点的经典可靠写法，不依赖线程编组。
+    // 把指定窗口带到前台。从后台线程（定时器）调用也能工作。
+    // 核心：Windows 有「前台锁」——若用户刚在别的窗口操作过，后台进程直接 SetForegroundWindow 会被拒（只闪任务栏）。
+    // 正解是把「前台线程」的输入队列桥接到「本线程」（AttachThreadInput），
+    // 这样系统便认为本线程有资格置前，对任何前台窗口（浏览器/其他应用/桌面）都生效。
+    // 最后用 SwitchToThisWindow 兜底（任务管理器同款强制置前）。
     public static bool FocusWindow(IntPtr hWnd) {
         if (hWnd == IntPtr.Zero) return false;
         try {
+            // 解除前台锁超时（仅当前会话生效，失败不影响后续）
+            try { SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, IntPtr.Zero, SPIF_SENDCHANGE); }
+            catch (Exception ex) { Log("spi fglock failed: " + ex.Message); }
             ShowWindow(hWnd, SW_RESTORE);
-            // ① 直接置前
-            SetForegroundWindow(hWnd);
-            if (GetForegroundWindow() == hWnd) { Log("focus ok (direct)"); return true; }
-            // ② 模拟一次 Alt 键输入释放前台锁，再置前
-            keybd_event(VK_MENU, 0x38, 0, UIntPtr.Zero);
-            SetForegroundWindow(hWnd);
-            keybd_event(VK_MENU, 0x38, KEYEVENTF_KEYUP, UIntPtr.Zero);
-            if (GetForegroundWindow() == hWnd) { Log("focus ok (alt-unlock)"); return true; }
-            // ③ 兜底：允许任意进程置前 + 置顶 + 切换
-            AllowSetForegroundWindow(ASFW_ANY);
-            LockSetForegroundWindow(LSFW_UNLOCK);
-            SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
-            SwitchToThisWindow(hWnd, true);
+            // 桥接输入队列：把前台线程挂到本线程
+            uint dummyPid;
+            uint foreThread = GetWindowThreadProcessId(GetForegroundWindow(), out dummyPid);
+            uint selfThread = GetCurrentThreadId();
+            bool attached = false;
+            if (foreThread != 0 && foreThread != selfThread) {
+                try { attached = AttachThreadInput(foreThread, selfThread, true); }
+                catch (Exception ex) { Log("attach failed: " + ex.Message); }
+            }
+            try {
+                SetForegroundWindow(hWnd);
+                SetActiveWindow(hWnd);
+                SetFocus(hWnd);
+                SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+            } finally {
+                if (attached) {
+                    try { AttachThreadInput(foreThread, selfThread, false); }
+                    catch { }
+                }
+            }
+            if (GetForegroundWindow() == hWnd) { Log("focus ok (attach)"); return true; }
+            // 兜底：强制切换（对桌面/其他进程也有效）
+            for (int i = 0; i < 2; i++) {
+                SwitchToThisWindow(hWnd, true);
+                if (GetForegroundWindow() == hWnd) { Log("focus ok (switch)"); return true; }
+                Thread.Sleep(40);
+            }
             bool ok = GetForegroundWindow() == hWnd;
             Log("focus result=" + ok);
             return ok;
@@ -612,6 +663,12 @@ class TrayApp : ApplicationContext {
         if (codexHwnd != IntPtr.Zero) {
             bool ok = Win32.FocusWindow(codexHwnd);
             Log("focus codex=" + ok);
+            if (!ok) {
+                // 抢焦点失败：多半是前台处于独占全屏（游戏/全屏视频），系统禁止其他进程抢前台。
+                // 改用任务栏图标闪烁提醒，用户切出全屏即可看到。
+                Win32.FlashWindow(codexHwnd);
+                Log("focus fallback: flashed taskbar (foreground likely exclusive fullscreen - cannot steal focus)");
+            }
         }
         InvokeUI(() => UpdateStatus());
     }
