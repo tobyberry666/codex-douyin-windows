@@ -3,6 +3,9 @@
 监听 [Codex](https://github.com/openai/codex)（现已并入 **ChatGPT**）的本地会话状态，在抖音与 ChatGPT 窗口之间自动切换焦点：ChatGPT 在干活时**若你正在看抖音**就帮你接着刷，ChatGPT 等你反馈时**一定把焦点拉回 ChatGPT**——但你不在抖音时，只拉回焦点、不打扰、不擅自暂停抖音。
 
 > 注：原产品名为 Codex，后与 ChatGPT 合体，桌面应用窗口名即为 **ChatGPT**。本工具窗口匹配同时按标题与进程名（`"ChatGPT"`, `"Codex"` 兜底）查找。
+
+
+
 >又注：拉回chatgpt时您须“没有开启全屏”状态
 
 ---
