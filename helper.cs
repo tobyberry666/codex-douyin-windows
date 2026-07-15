@@ -106,27 +106,42 @@ static class Win32 {
         keybd_event(VK_SPACE, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
     }
 
+    // UI 线程同步上下文：焦点操作必须在 UI 线程（有消息泵）执行，
+    // 否则 AttachThreadInput 挂错线程、SetForegroundWindow 绕不过 Windows 前台锁。
+    public static System.Threading.SynchronizationContext UiSync = null;
+
     public static bool FocusWindow(IntPtr hWnd) {
+        if (hWnd == IntPtr.Zero) return false;
+        bool result = false;
+        if (UiSync != null) {
+            // 同步切到 UI 线程执行，确保 AttachThreadInput/SetForegroundWindow 在前台锁豁免下运行
+            UiSync.Send(delegate { result = FocusWindowCore(hWnd); }, null);
+        } else {
+            result = FocusWindowCore(hWnd);
+        }
+        return result;
+    }
+
+    static bool FocusWindowCore(IntPtr hWnd) {
         try {
             ShowWindow(hWnd, SW_RESTORE);
             IntPtr foreground = GetForegroundWindow();
             uint forePid;
             uint foreThread = GetWindowThreadProcessId(foreground, out forePid);
-            uint curThread = GetCurrentThreadId();
-            Log("focus attempt: foreThread=" + foreThread + " curThread=" + curThread + " sameAsFore=" + (foreThread == curThread));
-            // 关键修复：绕过 Windows 前台锁必须把【调用线程(helper)】挂到【前台线程】，
-            // 这样 SetForegroundWindow 会被当成从前台线程发起。旧版错误地挂到 target 线程，无效。
-            if (foreThread != 0 && foreThread != curThread) {
-                AttachThreadInput(foreThread, curThread, true);
+            uint uiThread = GetCurrentThreadId(); // 此刻在 UI 线程（有消息泵）
+            Log("focus attempt: foreThread=" + foreThread + " uiThread=" + uiThread + " sameAsFore=" + (foreThread == uiThread));
+            // 绕过前台锁：把【前台线程】挂到【UI 线程】，SetForegroundWindow 才被当成前台线程发起
+            if (foreThread != 0 && foreThread != uiThread) {
+                AttachThreadInput(foreThread, uiThread, true);
             }
             SetForegroundWindow(hWnd);
-            if (foreThread != 0 && foreThread != curThread) {
-                AttachThreadInput(foreThread, curThread, false);
+            if (foreThread != 0 && foreThread != uiThread) {
+                AttachThreadInput(foreThread, uiThread, false);
             }
-            // 兜底：前台锁仍活跃时（如在别的窗口刚操作过），释放锁 + 允许目标进程设前台 + 模拟 Alt
+            // 兜底：锁仍活跃时（如在别的窗口刚操作过），释放锁 + 允许目标进程设前台 + 模拟 Alt
             if (GetForegroundWindow() != hWnd) {
-                AllowSetForegroundWindow(ASFW_ANY);
                 LockSetForegroundWindow(LSFW_UNLOCK);
+                AllowSetForegroundWindow(ASFW_ANY);
                 keybd_event(VK_MENU, 0x38, 0, UIntPtr.Zero);
                 SetForegroundWindow(hWnd);
                 keybd_event(VK_MENU, 0x38, KEYEVENTF_KEYUP, UIntPtr.Zero);
@@ -134,9 +149,9 @@ static class Win32 {
             SwitchToThisWindow(hWnd, true);
             // 提到普通窗口 z-order 最前（HWND_TOP，而非常驻 TOPMOST）
             SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-            bool result = GetForegroundWindow() == hWnd;
-            Log("focus result: nowForeground=" + result);
-            return result;
+            bool ok = GetForegroundWindow() == hWnd;
+            Log("focus result: nowForeground=" + ok);
+            return ok;
         } catch (Exception ex) { Log("focus failed: " + ex.Message); return false; }
     }
 
@@ -434,6 +449,8 @@ class TrayApp : ApplicationContext {
     const int FocusDelayMs = 450, RecallDelayMs = 120, BootstrapStaleSeconds = 21600;
 
     public TrayApp() {
+        // 捕获 UI 线程同步上下文，供 FocusWindow 把焦点操作封回 UI 线程执行
+        Win32.UiSync = System.Threading.SynchronizationContext.Current ?? new System.Windows.Forms.WindowsFormsSynchronizationContext();
         _monitor = new SessionMonitor();
         _monitor.OnEvent += HandleEvent;
         BuildTrayIcon();

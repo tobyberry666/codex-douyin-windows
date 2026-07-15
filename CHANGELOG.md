@@ -10,6 +10,15 @@
 - **焦点切换三重保险**：后台托盘程序调 `SetForegroundWindow` 常被 Windows 拒绝，故用 `SwitchToThisWindow` + `AttachThreadInput` + `SetWindowPos` 兜底。
 - **单一事实来源（SSOT）**：Python/PowerShell 版归档于 `legacy/`，C# 为唯一维护实现。
 
+## [Unreleased] - 2026-07-15
+
+### 焦点切换真正修复（前台锁绕过的线程根因）
+
+- **`[1.1.2]` 的 `FocusWindow` 改动仍无效的根因**：`SetForegroundWindow` / `AttachThreadInput` 由**后台工作线程**调用（`HandleEvent` 里 `new Thread(...).Start()`），而该线程**没有消息泵**。Windows 的 `AttachThreadInput` 要求被挂接的线程必须泵消息，把前台线程挂到一个不抽消息的线程上，前台锁豁免根本不成立——结果抖音、ChatGPT 两个方向都抢不到焦点（表现为「发消息拉不到抖音、也拉不回 ChatGPT」）。
+- **修复**：把焦点逻辑封到 **UI 线程**执行。在 `TrayApp` 构造时捕获 `SynchronizationContext.Current`（界线程同步上下文），`FocusWindow` 通过 `UiSync.Send(...)` 同步切回 UI 线程再跑 `FocusWindowCore`。此时 `GetCurrentThreadId()` 取到的是有消息泵的 UI 线程，`AttachThreadInput(foreThread, uiThread, …)` 方向正确、`SetForegroundWindow` 被系统当作前台线程发起，前台锁绕过得以成立。
+- **验证判据**：`helper.log` 中 `focus attempt:` 现在打印 `uiThread=`；若仍打印 `curThread=` 或 `targetThread=`，说明跑的不是本构建（未重建 exe 或未重启进程）。
+- ⚠️ **务必重启进程**：仅重新 `build.ps1` 覆盖 exe 不够，必须退出旧托盘进程（托盘右键退出 / 任务管理器结束 `DouyinForCodex.exe`）再双击 `run.bat`，否则内存里仍是旧逻辑。
+
 ## [1.1.2] - 2026-07-15
 
 ### 焦点逻辑改进：不在抖音时只拉回焦点、不打扰
