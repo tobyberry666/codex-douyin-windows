@@ -15,7 +15,7 @@
 ### 焦点逻辑改进：不在抖音时只拉回焦点、不打扰
 
 - **新增「当前焦点是否为抖音」判断（`IsForegroundDouyin`）**：通过前台窗口标题含「抖音」且类名为 `Chrome_WidgetWin` / `MozillaWindowClass` 判定。
-- **`BeginDouyinSession`（ChatGPT 干活阶段）改为条件触发**：仅当**用户当前正在看抖音**时才自动切到抖音窗口；否则直接跳过，不抢焦点、不擅自打开抖音。修复了此前「只要 ChatGPT 一开始干活，就把你从别的事上拽去看抖音」的打扰问题。
+- **`BeginDouyinSession`（ChatGPT 干活阶段）保持无条件自动切到抖音**：ChatGPT 一开始干活就把抖音窗口切到前台（老程序行为，满足「干活时帮你刷抖音」）。此处**不**加 `IsForegroundDouyin` 门槛——加门槛会导致你不在抖音时直接跳过、不再自动跳转（v1.1.2 初版曾误加该门槛，已回退）。
 - **`RecallToCodex`（ChatGPT 完成阶段）拆分暂停与拉回**：
   - 拉回 ChatGPT 焦点**始终执行**（无论你当时在哪）。
   - 暂停抖音**仅在「本次由本工具接管过抖音 且 你此刻仍在抖音」时**才做（`shouldPause = forcePause || (_managedSessionActive && onDouyin)`）。

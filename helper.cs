@@ -556,11 +556,8 @@ class TrayApp : ApplicationContext {
 
     void BeginDouyinSession() {
         lock (_lock) { if (!_enabled) { Log("working ignored"); return; } }
-        // 仅当用户当前正在看抖音时才自动切到抖音；否则不打扰（不抢焦点、不擅自打开）
-        if (!IsForegroundDouyin()) {
-            Log("working: foreground not douyin, skip auto-switch");
-            return;
-        }
+        // working 阶段始终自动切到抖音（老程序行为：ChatGPT 干活时帮你刷抖音）
+        // 「是否在前台抖音」只用于完成时决定是否暂停，见 RecallToCodex
         Log("working activate douyin");
         int gen;
         lock (_lock) _managedSessionActive = true;
