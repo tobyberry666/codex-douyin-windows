@@ -6,11 +6,9 @@
 
 ---
 
-## 🚀 快速开始（在**别人的电脑**上也能跑）
+## 🚀 快速开始
 
-不管你在自己机器还是朋友机器上，只要按下面走就行。两种拿到代码的方式，挑适合你的。
-
-### 前置条件（Windows 10/11 自带，基本不用装）
+### 前置条件
 
 | 需求 | 说明 |
 |------|------|
@@ -49,28 +47,6 @@ run.bat
   - **⏸（pause）**：监听中 / ChatGPT 在等你反馈。
 - 想看诊断信息：`powershell -ExecutionPolicy Bypass -File build.ps1` 结尾会打印窗口与环境状态；也可单独跑 `DouyinForCodex.exe --diagnose`。
 
----
-
-## 📦 给别人用的两种分发方式
-
-> 核心原则：**对方不需要有你的仓库，也不需要会命令**，就能用起来。
-
-**A. 公开仓库 → 对方 `git clone`**（适合开发者）
-当前仓库是**私有**的，陌生人无法 clone。若要开放给所有人：
-```powershell
-gh repo edit tobyberry666/codex-douyin-windows --visibility public
-```
-之后任何人都能 `git clone` 并按「方式一」构建。
-
-**B. 直接发编译好的 exe**（适合普通朋友，零门槛）
-你在本机 build 一次后，把下面两个文件打包发给朋友即可，**对方无需 Git、无需仓库、无需编译**：
-```
-DouyinForCodex.exe   <- build.ps1 生成的程序
-run.bat              <- 双击启动
-```
-朋友解压后双击 `run.bat` 就能用。`.NET Framework` 是 Windows 自带，一般不用额外安装。
-
----
 
 ## 🏗️ 架构
 
