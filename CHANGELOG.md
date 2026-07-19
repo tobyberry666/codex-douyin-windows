@@ -10,6 +10,15 @@
 - **焦点切换（绕过 Windows 前台锁）**：后台托盘程序调 `SetForegroundWindow` 常被 Windows 拒绝（只闪任务栏），根因是前台锁。当前方案用 `AttachThreadInput` 把前台线程输入队列桥接到本线程（DllImport 须从 kernel32 取 `GetCurrentThreadId`、方向为 `AttachThreadInput(foreThread, selfThread, true)`），再 `SetForegroundWindow`+`SetActiveWindow`+`SetFocus`+`SetWindowPos(HWND_TOP)`，最后 `SwitchToThisWindow` 兜底——对浏览器/其他应用/桌面任意前台窗口都生效。曾误弃 `AttachThreadInput`：早期因 `GetCurrentThreadId` 错挂 user32 报「入口点缺失」+ 桥接方向反 + 套了 `SynchronizationContext` 过度工程而整体失效，误判其「不可靠」；现已纠正。**早期「模拟 Alt 键」三步兜底实测仅对浏览器前台有效，对浏览器外的应用/桌面无效，故弃用。**
 - **单一事实来源（SSOT）**：Python/PowerShell 版归档于 `legacy/`，C# 为唯一维护实现。
 
+## [1.1.4] - 2026-07-19
+
+### 工程化收尾：文档链接修复 + 窗口匹配去硬编码 + 迁移清单
+
+- **修复 README/AGENTS/CHANGELOG 引用 `CLAUDE.md` 链接 404**：实际文件名 `CLAUDEatention.md`（疑似 `CLAUDE-attention` 连写笔误）重命名为 `CLAUDE.md`，与既有引用及文件首行自称一致。零引用需改。
+- **窗口匹配字符串去硬编码（清算 CLAUDE.md 第 5 节第 4 条技术债）**：新增 `Win32.CodexWindowTitles` / `Win32.CodexProcessNames` 两个 `static readonly string[]` 常量；`RecallToCodex` 与 `Diagnose` 共 4 处 `"ChatGPT","Codex"` 硬编码改为引用常量。新增调用点一律引用常量，避免再次散落不同步。
+- **CLAUDE.md 新增第 7 节「迁移到现代 .NET 时的 checklist」**：列出 `JavaScriptSerializer → System.Text.Json`、C# 5 → 7+ 语法升级、`Add-Type → dotnet build`、CI 改造、会话目录多候选探测等待清算技术债清单。同步将第 5 节第 4 条红线更新为「已集中为常量」。
+- ⚠️ **未含 Release 资产更新**：GitHub Releases 上的 `DouyinForCodex.exe` 仍停在 v1.1.1，本次源码改动需本机 `build.ps1` 重建 exe 后重新发布 Release。
+
 ## [1.1.3] - 2026-07-15
 
 ### 独占全屏限制与闪烁兜底（承认 OS 硬约束，不再强行抢焦点）

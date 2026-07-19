@@ -41,6 +41,12 @@ static class Win32 {
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
 
+    // ChatGPT（原 Codex，合体后窗口/进程名即 ChatGPT）窗口匹配候选。
+    // 标题匹配用 CodexWindowTitles；进程名匹配用 CodexProcessNames（不依赖标题文字，作兜底）。
+    // 集中定义，避免散落在 RecallToCodex / Diagnose 多处不同步（见 CLAUDE.md 操作红线第 4 条）。
+    public static readonly string[] CodexWindowTitles = new string[] { "ChatGPT", "Codex" };
+    public static readonly string[] CodexProcessNames = new string[] { "ChatGPT", "Codex" };
+
     public const int SW_RESTORE = 9;
     public const uint KEYEVENTF_KEYUP = 0x0002;
     public const byte VK_SPACE = 0x20;
@@ -657,8 +663,8 @@ class TrayApp : ApplicationContext {
         Thread.Sleep(RecallDelayMs);
         lock (_lock) { if (gen != _generation) return; }
 
-        var codexHwnd = Win32.FindWindowByTitle("ChatGPT", "Codex");
-        if (codexHwnd == IntPtr.Zero) codexHwnd = Win32.FindWindowByProcessName("ChatGPT", "Codex");
+        var codexHwnd = Win32.FindWindowByTitle(Win32.CodexWindowTitles);
+        if (codexHwnd == IntPtr.Zero) codexHwnd = Win32.FindWindowByProcessName(Win32.CodexProcessNames);
         Log("codex hwnd=" + (codexHwnd != IntPtr.Zero ? codexHwnd.ToString() : "NOT FOUND"));
         if (codexHwnd != IntPtr.Zero) {
             bool ok = Win32.FocusWindow(codexHwnd);
@@ -737,8 +743,8 @@ class Program {
 
     static void Diagnose() {
         Console.WriteLine("douyin_window=" + (Win32.FindBrowserWindow("\u6296\u97f3") != IntPtr.Zero ? "found" : "none"));
-        var byTitle = Win32.FindWindowByTitle("ChatGPT", "Codex");
-        var byProc = Win32.FindWindowByProcessName("ChatGPT", "Codex");
+        var byTitle = Win32.FindWindowByTitle(Win32.CodexWindowTitles);
+        var byProc = Win32.FindWindowByProcessName(Win32.CodexProcessNames);
         Console.WriteLine("codex_window_by_title=" + (byTitle != IntPtr.Zero ? "found" : "none"));
         Console.WriteLine("codex_window_by_process=" + (byProc != IntPtr.Zero ? "found" : "none"));
         Console.WriteLine("foreground=" + Win32.GetForegroundTitle() + " is_douyin=" + (Win32.GetForegroundTitle().IndexOf("\u6296\u97f3", StringComparison.OrdinalIgnoreCase) >= 0));

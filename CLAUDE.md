@@ -74,7 +74,7 @@ C#5 化时把 `GetThreadId` 里的 `out` 变量错写成 `string`，与 `Diction
 1. **改 `helper.cs` 后，必须保持 C# 5 语法**（见约束 A）。提交前本地跑 `build.ps1` 确认编译过。
 2. **不要重新引入 `System.Text.Json` / `System.Memory` 等 NuGet 包引用**——除非先把构建改成 `dotnet build`。
 3. **不要删 `legacy/`**——那是历史实现证据，且 README 引用了它。
-4. **窗口匹配字符串**（`"ChatGPT"`, `"Codex"`）现在散落在 `RecallToCodex` 与 `Diagnose` 两处（第 587-588、661-662 行）。若要改，两处必须同步；优先提成常量。
+4. **窗口匹配字符串**（`"ChatGPT"`, `"Codex"`）已集中为 `Win32.CodexWindowTitles` / `Win32.CodexProcessNames` 常量（`RecallToCodex` 与 `Diagnose` 共用）。新增调用点一律引用常量，不要再硬编码。
 5. **编译产物 `DouyinForCodex.exe` 不入库**（见 `.gitignore`）。
 
 ---
@@ -85,3 +85,16 @@ C#5 化时把 `GetThreadId` 里的 `out` 变量错写成 `string`，与 `Diction
 - 会话监控目录硬编码 `%USERPROFILE%\.codex\sessions`。若 ChatGPT 合体后把会话挪到 `.chatgpt`，自动触发会静默失效（手动托盘点击仍可用）。
 - 后台程序抢前台受 Windows UIPI 限制；若 ChatGPT 以管理员权限运行而本工具未提权，跨权限切前台可能失败。
 - `JavaScriptSerializer` 是废弃 API（技术债），仅在当前 .NET Framework 目标下为可行解。
+
+---
+
+## 7. 迁移到现代 .NET 时的 checklist（技术债清算）
+
+当前为 .NET Framework 4.x + `Add-Type` 单文件编译（零 NuGet、零 dotnet）。一旦迁移到 `dotnet build` + `.csproj` + NuGet，**必须**同步清算以下技术债：
+
+- [ ] **JSON 解析**：`System.Web.Script.Serialization.JavaScriptSerializer` → `System.Text.Json`。涉及 `SessionMonitor.DecodeMetadata` / `DecodeStateEvent`；去掉 `#pragma warning disable 0618` 与迁移注释。
+- [ ] **C# 语法升级**：`helper.cs` 当前锁在 C# 5（约束 A）。迁现代 .NET 后可启用 C# 7+：表达式体、`out var`、模式匹配、`?.`、字符串插值等。
+- [ ] **构建方式**：`build.ps1` 的 `Add-Type` → `dotnet build`；`-ReferencedAssemblies` 改为 `.csproj` 的 `<PackageReference>` / `<Reference>`。`AGENTS.md` 的"唯一构建方式"红线同步更新。
+- [ ] **CI**：`.github/workflows/ci.yml` 的 `build.ps1` 调用改为 `dotnet build` + `dotnet test`（若有正式测试项目）。
+- [ ] **会话目录**：硬编码 `%USERPROFILE%\.codex\sessions`，若 ChatGPT 合体后会话挪到 `.chatgpt`，需改为探测多候选目录。
+- [ ] **窗口匹配**：`CodexWindowTitles` / `CodexProcessNames` 常量届时可改为配置项，适应未来窗口名再变更。
