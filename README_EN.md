@@ -32,7 +32,7 @@ flowchart LR
 
 ## Tray States and Commands
 
-- `▶`: ChatGPT is working and Douyin is playing.
+- `▶`: ChatGPT/Codex is working.
 - `⏸`: Monitoring is active, or ChatGPT is waiting for feedback.
 - Right-click menu: status, automatic browsing toggle, open Douyin, pause and return to ChatGPT, and exit.
 

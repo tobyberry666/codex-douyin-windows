@@ -32,7 +32,7 @@ flowchart LR
 
 ## 托盘状态与命令
 
-- `▶`：ChatGPT 工作中，抖音正在播放。
+- `▶`：ChatGPT/Codex 工作中。
 - `⏸`：监听中，或 ChatGPT 正在等待反馈。
 - 右键菜单：状态、启用自动刷开关、打开抖音、暂停并回到 ChatGPT、退出。
 
