@@ -709,39 +709,48 @@ class Program {
         Application.Run(new TrayApp());
     }
 
+    static void Assert(bool condition, string message) {
+        if (!condition) throw new Exception("Self-test failed: " + message);
+    }
+
     static void SelfTest() {
         Console.WriteLine("=== Running self-tests ===");
 
         var meta = SessionMonitor.DecodeMetadata(Encoding.UTF8.GetBytes(
             @"{""type"":""session_meta"",""payload"":{""id"":""thread-1"",""thread_source"":""user"",""source"":""vscode""}}"));
-        Debug.Assert(meta != null && meta.UserThread && meta.ThreadId == "thread-1");
+        Assert(meta != null && meta.UserThread && meta.ThreadId == "thread-1", "user session metadata is decoded");
 
         meta = SessionMonitor.DecodeMetadata(Encoding.UTF8.GetBytes(
             @"{""type"":""session_meta"",""payload"":{""id"":""thread-2"",""thread_source"":""subagent"",""parent_thread_id"":""thread-1"",""source"":{""subagent"":{""other"":""guardian""}}}}"));
-        Debug.Assert(meta != null && !meta.UserThread);
+        Assert(meta != null && !meta.UserThread, "thread_source subagent metadata is excluded");
 
         meta = SessionMonitor.DecodeMetadata(Encoding.UTF8.GetBytes(
             @"{""type"":""session_meta"",""payload"":{""id"":""thread-3"",""thread_source"":""user"",""source"":{""subagent"":true}}}"));
-        Debug.Assert(meta != null && !meta.UserThread);
+        Assert(meta != null && !meta.UserThread, "source subagent metadata is excluded");
 
         var um = new SessionMonitor.SessionMetadata { ThreadId = "t1", UserThread = true };
 
-        Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
-            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""event_msg"",""payload"":{""type"":""task_started""}}"), um).Phase == "working");
-        Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
-            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""event_msg"",""payload"":{""type"":""task_complete""}}"), um).Phase == "attention");
-        Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
-            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""event_msg"",""payload"":{""type"":""turn_aborted""}}"), um).Phase == "attention");
-        Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
-            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""response_item"",""payload"":{""type"":""function_call"",""name"":""request_user_input""}}"), um).Phase == "attention");
-        Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
-            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""response_item"",""payload"":{""type"":""custom_tool_call"",""name"":""codex_app.request_user_input""}}"), um).Phase == "attention");
-        Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
-            @"{""timestamp"":""not-a-timestamp"",""type"":""event_msg"",""payload"":{""type"":""task_started""}}"), um) == null);
-        Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
-            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""unrelated_event"",""payload"":{""type"":""task_started""}}"), um) == null);
+        var ev = SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
+            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""event_msg"",""payload"":{""type"":""task_started""}}"), um);
+        Assert(ev != null && ev.Phase == "working", "task_started sets working phase");
+        ev = SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
+            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""event_msg"",""payload"":{""type"":""task_complete""}}"), um);
+        Assert(ev != null && ev.Phase == "attention", "task_complete sets attention phase");
+        ev = SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
+            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""event_msg"",""payload"":{""type"":""turn_aborted""}}"), um);
+        Assert(ev != null && ev.Phase == "attention", "turn_aborted sets attention phase");
+        ev = SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
+            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""response_item"",""payload"":{""type"":""function_call"",""name"":""request_user_input""}}"), um);
+        Assert(ev != null && ev.Phase == "attention", "function_call request_user_input sets attention phase");
+        ev = SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
+            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""response_item"",""payload"":{""type"":""custom_tool_call"",""name"":""codex_app.request_user_input""}}"), um);
+        Assert(ev != null && ev.Phase == "attention", "custom_tool_call request_user_input sets attention phase");
+        Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
+            @"{""timestamp"":""not-a-timestamp"",""type"":""event_msg"",""payload"":{""type"":""task_started""}}"), um) == null, "invalid timestamp is rejected");
+        Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
+            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""unrelated_event"",""payload"":{""type"":""task_started""}}"), um) == null, "unrelated event type is rejected");
 
-        Debug.Assert(SessionMonitor.DecodeMetadata(Encoding.UTF8.GetBytes("nope")) == null);
+        Assert(SessionMonitor.DecodeMetadata(Encoding.UTF8.GetBytes("nope")) == null, "invalid metadata is rejected");
         Console.WriteLine("Self-tests passed.");
     }
 
