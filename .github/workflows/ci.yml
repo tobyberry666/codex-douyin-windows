@@ -24,3 +24,11 @@ jobs:
             Write-Error "Build or self-test failed (exit code $LASTEXITCODE)"
             exit 1
           }
+
+      - name: Verify release executable
+        shell: pwsh
+        run: |
+          $executable = Join-Path $PWD "DouyinForCodex.exe"
+          if (-not (Test-Path -LiteralPath $executable) -or (Get-Item -LiteralPath $executable).Length -le 0) {
+            throw "Release executable is missing or empty: $executable"
+          }

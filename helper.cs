@@ -736,6 +736,10 @@ class Program {
             @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""response_item"",""payload"":{""type"":""function_call"",""name"":""request_user_input""}}"), um).Phase == "attention");
         Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
             @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""response_item"",""payload"":{""type"":""custom_tool_call"",""name"":""codex_app.request_user_input""}}"), um).Phase == "attention");
+        Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
+            @"{""timestamp"":""not-a-timestamp"",""type"":""event_msg"",""payload"":{""type"":""task_started""}}"), um) == null);
+        Debug.Assert(SessionMonitor.DecodeStateEvent(Encoding.UTF8.GetBytes(
+            @"{""timestamp"":""2026-07-13T07:52:25.288Z"",""type"":""unrelated_event"",""payload"":{""type"":""task_started""}}"), um) == null);
 
         Debug.Assert(SessionMonitor.DecodeMetadata(Encoding.UTF8.GetBytes("nope")) == null);
         Console.WriteLine("Self-tests passed.");
