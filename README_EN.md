@@ -18,14 +18,16 @@ Get `DouyinForCodex.exe` from the [latest Release](https://github.com/tobyberry6
 
 ```mermaid
 flowchart LR
-  A[Codex 工作中] -->|用户正在看抖音| B[保持或打开抖音]
-  A -->|用户不在抖音| C[不打扰当前窗口]
-  D[Codex 等待反馈] --> E[切回 ChatGPT]
-  F[独占全屏] --> G[任务栏闪烁兜底]
+  A[Codex working] --> B[Open or focus Douyin]
+  C[Codex waiting for feedback] --> D{Managed by helper and still on Douyin?}
+  D -->|Yes| E[Pause Douyin]
+  D -->|No| F[Return focus to ChatGPT]
+  E --> F
+  G[Exclusive full-screen] --> H[Flash taskbar fallback]
 ```
 
-- When Codex is working, the utility keeps or opens Douyin only when Douyin is the active web page; otherwise it leaves the current window alone.
-- When Codex needs feedback, it returns focus to ChatGPT. The automatic path pauses playback only for a Douyin session previously managed by this utility, so it does not send keys to other windows.
+- When Codex is working and automatic browsing is enabled, the utility opens or focuses the Douyin web page.
+- When Codex needs feedback, the automatic path pauses playback only when it previously managed the Douyin session and Douyin is still active, then returns focus to ChatGPT so it does not send keys to other windows.
 - If exclusive full-screen mode prevents focus changes, the ChatGPT taskbar icon flashes as a fallback notification.
 
 ## Tray States and Commands
